@@ -1,19 +1,43 @@
+import logging
 import os
+import time
 from typing import Any
 
 import httpx2
 from dotenv import load_dotenv
-from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt
+from tenacity import (
+    AsyncRetrying,
+    RetryCallState,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 from help_desk_agent.core import Message
 from help_desk_agent.exceptions import LLMException
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_MODEL = os.getenv("LLM_MODEL", "gemini-3.8-flash")
 
 
 RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+def _log_retry(retry_state: RetryCallState) -> None:
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if isinstance(exc, httpx2.HTTPStatusError):
+        reason = f"HTTP {exc.response.status_code}"
+    else:
+        reason = repr(exc)
+    logger.warning(
+        "Attempt %d failed (%s), retrying in %.1fs",
+        retry_state.attempt_number,
+        reason,
+        retry_state.upcoming_sleep,
+    )
 
 
 class LLMClient:
@@ -24,7 +48,7 @@ class LLMClient:
         timeout: float = 30.0,
         temperature: float = 0.2,
         max_tokens: int = 1000,
-        max_retries: int = 3,
+        max_retries: int = 5,
     ):
         self.model = model_name
         self.temperature = temperature
@@ -40,14 +64,28 @@ class LLMClient:
             timeout=timeout,
             transport=httpx2.AsyncHTTPTransport(retries=3),
         )
+        logger.debug(
+            "LLMClient ready: model=%s url=%s api_key=%s",
+            self.model,
+            self._http.base_url,
+            "set" if self._api_key else "MISSING",
+        )
 
     async def __call__(self, messages: list[Message]) -> str:
         payload = self._create_payload(messages)
+        logger.info(
+            "Calling %s with %d messages", self.model, len(payload["messages"])
+        )
+        logger.debug("Request payload: %s", payload)
+        started = time.perf_counter()
 
         try:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(self._max_retries),
                 retry=retry_if_exception_type(httpx2.HTTPError),
+                # Overload errors (429/503) need real pauses between attempts
+                wait=wait_random_exponential(multiplier=1, max=30),
+                before_sleep=_log_retry,
                 reraise=True,
             ):
                 with attempt:
@@ -60,6 +98,13 @@ class LLMClient:
             ) from exc
         except httpx2.HTTPError as exc:
             raise LLMException(f"Cannot reach the model provider: {exc}") from exc
+
+        logger.info(
+            "Provider answered HTTP %d in %.2fs",
+            response.status_code,
+            time.perf_counter() - started,
+        )
+        logger.debug("Response body: %s", response.text)
 
         if response.is_error:
             raise LLMException(
