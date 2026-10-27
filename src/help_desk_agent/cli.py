@@ -6,7 +6,7 @@ import httpx2
 from dotenv import find_dotenv, load_dotenv
 
 from help_desk_agent.agent import Agent
-from help_desk_agent.llm_client import DEFAULT_MODEL, LLMClient
+from help_desk_agent.llm_client import LLMClient
 
 REQUIRED_ENV_VARS = ("LLM_API_KEY", "LLM_API_URL")
 
@@ -58,8 +58,7 @@ def check_health(timeout: float) -> None:
 )
 def ask(query: str, max_steps: int) -> None:
     """Ask the agent a QUERY."""
-    llm_client = LLMClient(model_name=os.getenv("LLM_MODEL", DEFAULT_MODEL))
-    agent = Agent(llm_client, tools={}, max_steps=max_steps)
+    agent = Agent(LLMClient(), tools={}, max_steps=max_steps)
     asyncio.run(agent.run(query))
 
 
