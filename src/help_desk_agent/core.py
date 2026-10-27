@@ -30,7 +30,7 @@ class Action:
     action_input: str | None = None
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class AgentState:
     """Holds the current state and memory of the agent."""
 
