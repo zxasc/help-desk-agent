@@ -33,7 +33,7 @@ class LLMClient:
         self._api_key = os.getenv("LLM_API_KEY")
         self._api_url = os.getenv("LLM_API_URL")
         self._http = httpx2.AsyncClient(
-            base_url=str(self._api_key).rstrip("/") + "/",
+            base_url=str(self._api_url).rstrip("/") + "/",
             headers={"Authorization": f"Bearer {self._api_key}"}
             if self._api_key
             else {},
@@ -65,11 +65,17 @@ class LLMClient:
             raise LLMException(
                 f"Provider returned HTTP {response.status_code}: {response.text[:500]}"
             )
-        return response.json()
+        try:
+            return response.json()["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise LLMException(
+                f"Unexpected response from provider: {response.text[:500]}"
+            ) from exc
 
     def _create_payload(self, messages: list[Message]) -> dict[str, Any]:
         return {
             "model": self.model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
             "max_tokens": self._max_tokens,
+            "temperature": self.temperature,
         }
