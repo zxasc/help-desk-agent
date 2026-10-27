@@ -2,10 +2,13 @@ import asyncio
 import inspect
 import json
 from datetime import datetime
+import logging
 
 from help_desk_agent.core import CURRENT_TIME, Action, AgentState, Message, Tool
 from help_desk_agent.exceptions import ToolException
 from help_desk_agent.llm_client import LLMClient
+
+logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -91,7 +94,13 @@ When you are ready to answer the customer, use Action: FINAL_ANSWER.
 
             # 1. Ask the LLM what to do next
             llm_response = await self.llm(state.messages)
+            logger.debug("Step %d raw LLM response:\n%s", state.step_count, llm_response)
             action = self._parse_response(llm_response)
+            logger.debug("Step %d parsed action: %s", state.step_count, action)
+            if not action.action_name:
+                logger.warning(
+                    "Step %d: no 'Action:' line found in LLM response", state.step_count
+                )
 
             print(f"🤔 THOUGHT: {action.thought}")
 
