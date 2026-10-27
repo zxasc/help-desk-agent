@@ -13,7 +13,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from help_desk_agent.core import Message
+from help_desk_agent.core import Message, Tool, ToolCall
 from help_desk_agent.exceptions import LLMException
 
 load_dotenv()
@@ -47,7 +47,7 @@ class LLMClient:
         model_name: str = DEFAULT_MODEL,
         timeout: float = 30.0,
         temperature: float = 0.2,
-        max_tokens: int = 1000,
+        max_tokens: int = 10000,
         max_retries: int = 5,
     ):
         self.model = model_name
@@ -71,11 +71,11 @@ class LLMClient:
             "set" if self._api_key else "MISSING",
         )
 
-    async def __call__(self, messages: list[Message]) -> str:
-        payload = self._create_payload(messages)
-        logger.info(
-            "Calling %s with %d messages", self.model, len(payload["messages"])
-        )
+    async def __call__(
+        self, messages: list[Message], tools: list[Tool] | None = None
+    ) -> Message:
+        payload = self._create_payload(messages, tools or [])
+        logger.info("Calling %s with %d messages", self.model, len(payload["messages"]))
         logger.debug("Request payload: %s", payload)
         started = time.perf_counter()
 
@@ -83,7 +83,6 @@ class LLMClient:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(self._max_retries),
                 retry=retry_if_exception_type(httpx2.HTTPError),
-                # Overload errors (429/503) need real pauses between attempts
                 wait=wait_random_exponential(multiplier=1, max=30),
                 before_sleep=_log_retry,
                 reraise=True,
@@ -111,16 +110,57 @@ class LLMClient:
                 f"Provider returned HTTP {response.status_code}: {response.text[:500]}"
             )
         try:
-            return response.json()["choices"][0]["message"]["content"]
+            choice = response.json()["choices"][0]
+            if choice.get("finish_reason") == "length":
+                logger.warning(
+                    "Reply cut off at max_tokens=%d, reasoning models may leave no text",
+                    self._max_tokens,
+                )
+            return self._parse_message(choice["message"])
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise LLMException(
                 f"Unexpected response from provider: {response.text[:500]}"
             ) from exc
 
-    def _create_payload(self, messages: list[Message]) -> dict[str, Any]:
-        return {
+    def _create_payload(
+        self, messages: list[Message], tools: list[Tool]
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "model": self.model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": [self._serialize_message(m) for m in messages],
             "max_tokens": self._max_tokens,
             "temperature": self.temperature,
         }
+        if tools:
+            payload["tools"] = [t.schema() for t in tools]
+        return payload
+
+    @staticmethod
+    def _serialize_message(message: Message) -> dict[str, Any]:
+        data: dict[str, Any] = {"role": message.role, "content": message.content}
+        if message.tool_calls:
+            data["tool_calls"] = [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": call.arguments},
+                }
+                for call in message.tool_calls
+            ]
+        if message.tool_call_id:
+            data["tool_call_id"] = message.tool_call_id
+        return data
+
+    @staticmethod
+    def _parse_message(data: dict[str, Any]) -> Message:
+        tool_calls = tuple(
+            ToolCall(
+                id=call["id"],
+                name=call["function"]["name"],
+                arguments=call["function"].get("arguments") or "{}",
+            )
+            for call in data.get("tool_calls") or []
+        )
+        return Message(
+            role="assistant", content=data.get("content"), tool_calls=tool_calls
+        )

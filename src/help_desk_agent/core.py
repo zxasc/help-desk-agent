@@ -8,11 +8,22 @@ CURRENT_TIME = datetime(2026, 6, 10, 9, 0, tzinfo=timezone(timedelta(hours=2)))
 
 
 @dataclass(frozen=True, kw_only=True)
+class ToolCall:
+    """Represents the LLM's request to run one tool."""
+
+    id: str
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class Message:
     """Represents a chat message in the conversation history."""
 
     role: str
-    content: str
+    content: str | None = None
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_call_id: str | None = None  # set on role="tool" messages
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -22,16 +33,18 @@ class Tool:
     name: str
     description: str
     func: Callable
-    parameters: dict[str, Any]
+    parameters: dict[str, Any]  # JSON Schema of the function arguments
 
-
-@dataclass(frozen=True, kw_only=True)
-class Action:
-    """Represents the LLM's decision for the current step."""
-
-    thought: str
-    action_name: str | None = None
-    action_input: str | None = None
+    def schema(self) -> dict[str, Any]:
+        """Tool definition in the OpenAI-compatible `tools` format."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
 
 
 @dataclass(kw_only=True)
