@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import click
@@ -12,10 +13,35 @@ from help_desk_agent.llm_client import LLMClient
 REQUIRED_ENV_VARS = ("LLM_API_KEY", "LLM_API_URL")
 
 
+logger = logging.getLogger(__name__)
+
+
+def _configure_logging(verbosity: int) -> None:
+    level = {0: logging.WARNING, 1: logging.INFO}.get(verbosity, logging.DEBUG)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    if verbosity < 3:
+        # Connection-level internals are very noisy, only show them at -vvv
+        for name in ("httpcore2", "asyncio"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+
+
 @click.group()
-def cli() -> None:
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Log to stderr: -v info, -vv debug, -vvv include HTTP internals.",
+)
+def cli(verbose: int) -> None:
     """CityWheel help desk agent."""
-    load_dotenv()
+    _configure_logging(verbose)
+    env_path = find_dotenv(usecwd=True)
+    logger.debug("Loading env from %s", env_path or "process environment only")
+    load_dotenv(env_path)
 
 
 @cli.command("check-health")
