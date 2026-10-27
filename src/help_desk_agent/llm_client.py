@@ -5,8 +5,8 @@ import httpx2
 from dotenv import load_dotenv
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt
 
-from .core import Message
-from .exceptions import LLMException
+from help_desk_agent.core import Message
+from help_desk_agent.exceptions import LLMException
 
 load_dotenv()
 
