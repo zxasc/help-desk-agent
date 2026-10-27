@@ -2,9 +2,12 @@ import os
 from typing import Any
 
 import httpx2
+from dotenv import load_dotenv
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt
 
 from .core import Message
+
+load_dotenv()
 
 DEFAULT_MODEL = os.getenv("LLM_MODEL", "gemini-3.8-flash")
 
