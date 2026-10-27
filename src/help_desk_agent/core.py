@@ -1,6 +1,10 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+# Fixed "now" from the assignment README, so answers are the same on every run
+CURRENT_TIME = datetime(2026, 6, 10, 9, 0, tzinfo=timezone(timedelta(hours=2)))
 
 
 @dataclass(frozen=True, kw_only=True)
