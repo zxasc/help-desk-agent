@@ -6,14 +6,11 @@ from dotenv import load_dotenv
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt
 
 from .core import Message
+from .exceptions import LLMException
 
 load_dotenv()
 
 DEFAULT_MODEL = os.getenv("LLM_MODEL", "gemini-3.8-flash")
-
-
-class LLMException(Exception):
-    pass
 
 
 RETRY_STATUS = {429, 500, 502, 503, 504}
