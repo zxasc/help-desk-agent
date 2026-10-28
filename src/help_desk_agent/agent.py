@@ -4,9 +4,15 @@ import json
 import logging
 from datetime import datetime
 
-from help_desk_agent.core import CURRENT_TIME, AgentState, Message, Tool, ToolCall
+from help_desk_agent.core import (
+    CURRENT_TIME,
+    AgentState,
+    ChatModel,
+    Message,
+    Tool,
+    ToolCall,
+)
 from help_desk_agent.exceptions import ToolException
-from help_desk_agent.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +20,7 @@ logger = logging.getLogger(__name__)
 class Agent:
     def __init__(
         self,
-        llm_client: LLMClient,
+        llm_client: ChatModel,
         tools: dict[str, Tool],
         max_steps: int = 5,
         now: datetime = CURRENT_TIME,
