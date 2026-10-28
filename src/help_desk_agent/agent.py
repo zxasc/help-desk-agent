@@ -47,7 +47,7 @@ RULES:
             result = await tool.func(**args)
         else:
             result = await asyncio.to_thread(tool.func, **args)
-        return str(result)
+        return result if isinstance(result, str) else json.dumps(result)
 
     async def _run_tool_call(self, call: ToolCall) -> str:
         tool = self.tools.get(call.name)
