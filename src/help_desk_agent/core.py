@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Protocol
 
 # Fixed "now" from the assignment README, so answers are the same on every run
 CURRENT_TIME = datetime(2026, 6, 10, 9, 0, tzinfo=timezone(timedelta(hours=2)))
@@ -45,6 +45,14 @@ class Tool:
                 "parameters": self.parameters,
             },
         }
+
+
+class ChatModel(Protocol):
+    """Anything that returns the model's next message, e.g. LLMClient or a test fake."""
+
+    async def __call__(
+        self, messages: list[Message], tools: list[Tool] | None = None
+    ) -> Message: ...
 
 
 @dataclass(kw_only=True)
