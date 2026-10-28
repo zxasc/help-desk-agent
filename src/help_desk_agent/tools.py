@@ -1,10 +1,12 @@
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
-from help_desk_agent.core import Tool
+from help_desk_agent.core import CURRENT_TIME, Tool
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 POLICIES_DIR = DATA_DIR / "policies"
@@ -130,6 +132,59 @@ def get_booking(booking_id: str) -> dict[str, Any]:
     return {"found": True, "booking": booking}
 
 
+def _eur(amount: Decimal) -> float:
+    return float(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _refund_percent(hours_before_start: float) -> int:
+    if hours_before_start >= 48:
+        return 100
+    if hours_before_start >= 24:
+        return 50
+    return 0
+
+
+def calculate_refund(booking_id: str, now: datetime = CURRENT_TIME) -> dict[str, Any]:
+    lookup = get_booking(booking_id)
+    if not lookup["found"]:
+        return lookup
+    booking = lookup["booking"]
+
+    if booking["status"] != "confirmed":
+        return {
+            "booking_id": booking["id"],
+            "can_cancel": False,
+            "reason": f"Bookings with status '{booking['status']}' cannot be cancelled "
+            "and nothing is refunded.",
+            "total_refund_eur": 0.0,
+        }
+
+    start = datetime.fromisoformat(booking["start"])
+    hours_before_start = (start - now).total_seconds() / 3600
+    percent = _refund_percent(hours_before_start)
+
+    rental_refund = Decimal(str(booking["rental_price_eur"])) * percent / 100
+    deposit_refund = Decimal(str(booking["deposit_eur"]))  # always refunded in full
+
+    if booking["paid_with"] == "voucher":
+        refund_method = "As a new voucher of the same value, never as money."
+    else:
+        refund_method = "To the same card within 5 working days."
+
+    return {
+        "booking_id": booking["id"],
+        "can_cancel": True,
+        "cancelled_at": now.isoformat(),
+        "hours_before_start": round(hours_before_start, 1),
+        "rental_refund_percent": percent,
+        "rental_refund_eur": _eur(rental_refund),
+        "booking_fee_refund_eur": 0.0,  # never refunded
+        "deposit_refund_eur": _eur(deposit_refund),
+        "total_refund_eur": _eur(rental_refund + deposit_refund),
+        "refund_method": refund_method,
+    }
+
+
 BOOKING_ID_PARAMETERS = {
     "type": "object",
     "properties": {
@@ -165,6 +220,13 @@ TOOLS = {
             name="get_booking",
             description="Get the details of one booking by its booking number.",
             func=get_booking,
+            parameters=BOOKING_ID_PARAMETERS,
+        ),
+        Tool(
+            name="calculate_refund",
+            description="Calculate how much the customer gets back if they cancel the "
+            "booking now. Always use this for refund amounts.",
+            func=calculate_refund,
             parameters=BOOKING_ID_PARAMETERS,
         ),
     )
