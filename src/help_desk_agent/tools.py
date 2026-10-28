@@ -1,3 +1,4 @@
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +8,7 @@ from help_desk_agent.core import Tool
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 POLICIES_DIR = DATA_DIR / "policies"
+BOOKINGS_PATH = DATA_DIR / "bookings.json"
 
 STOPWORDS = {
     "a",
@@ -109,6 +111,37 @@ def search_policies(query: str, top_k: int = 3) -> dict[str, Any]:
     return {"query": query, "results": results}
 
 
+def _normalize_booking_id(booking_id: str) -> str:
+    booking_id = booking_id.strip().upper()
+    if booking_id.isdigit():
+        booking_id = f"CW-{booking_id}"
+    return booking_id
+
+
+def load_bookings(path: Path = BOOKINGS_PATH) -> dict[str, dict[str, Any]]:
+    return {b["id"]: b for b in json.loads(path.read_text())}
+
+
+def get_booking(booking_id: str) -> dict[str, Any]:
+    booking_id = _normalize_booking_id(booking_id)
+    booking = load_bookings().get(booking_id)
+    if booking is None:
+        return {"found": False, "booking_id": booking_id, "error": "Booking not found."}
+    return {"found": True, "booking": booking}
+
+
+BOOKING_ID_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "booking_id": {
+            "type": "string",
+            "description": "Booking number, for example CW-1001.",
+        }
+    },
+    "required": ["booking_id"],
+}
+
+
 TOOLS = {
     tool.name: tool
     for tool in (
@@ -127,6 +160,12 @@ TOOLS = {
                 },
                 "required": ["query"],
             },
+        ),
+        Tool(
+            name="get_booking",
+            description="Get the details of one booking by its booking number.",
+            func=get_booking,
+            parameters=BOOKING_ID_PARAMETERS,
         ),
     )
 }
