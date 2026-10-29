@@ -148,7 +148,7 @@ fake-negatives, when questions were too strict.
 
 ## AI Coding
 
-I used Claude Code to pair programm with it. I used it mostly to generate code, which I've then 
+I used Claude Code to pair program with. I used it mostly to generate code, which I've then 
 manually reviewed. I often had to ask it to explain its choices, and often found simpler ways to
 implement certain details. A few examples of AI-generated code, which I had to fix:
 
