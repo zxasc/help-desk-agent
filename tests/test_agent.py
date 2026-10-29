@@ -10,6 +10,7 @@ from help_desk_agent.exceptions import ToolException
 
 QUESTION = "Is booking CW-1001 confirmed?"
 FINAL_ANSWER = "Yes, booking CW-1001 is confirmed."
+FOLLOW_UP = "And what if I cancel it?"
 BOOKING_ID = "CW-1001"
 TOOL_CALL_ID = "call-1"
 BOOKING_ARGUMENTS = json.dumps({"booking_id": BOOKING_ID})
@@ -222,6 +223,29 @@ def test_agent_returns_every_tool_run_with_its_result():
     ]
 
     assert run_agent(model).tool_runs == expected
+
+
+def test_agent_keeps_conversation_in_passed_messages():
+    model = FakeChatModel([FINAL_REPLY, FINAL_REPLY])
+    agent = Agent(model, TOOLS, max_steps=MAX_STEPS)
+    messages: list[Message] = []
+
+    async def chat() -> None:
+        await agent.run(QUESTION, messages)
+        await agent.run(FOLLOW_UP, messages)
+
+    asyncio.run(chat())
+    expected = [
+        ("system", None),
+        ("user", QUESTION),
+        ("assistant", FINAL_ANSWER),
+        ("user", FOLLOW_UP),
+    ]
+
+    assert [
+        (m.role, None if m.role == "system" else m.content)
+        for m in model.calls[LAST_CALL].messages
+    ] == expected
 
 
 def test_agent_reports_each_tool_run_while_running():

@@ -12,7 +12,7 @@ from rich.markdown import Markdown
 from rich.text import Text
 
 from help_desk_agent.agent import Agent
-from help_desk_agent.core import ToolRun
+from help_desk_agent.core import Message, ToolRun
 from help_desk_agent.evaluation import load_cases, render_results, run_case
 from help_desk_agent.exceptions import LLMException
 from help_desk_agent.llm_client import LLMClient
@@ -135,6 +135,47 @@ def ask(query: str, max_steps: int, verbose: int) -> None:
         raise click.ClickException("The agent returned an empty answer.")
     console.print()
     console.print(Markdown(f"**{ANSWER_LABEL}** {result.answer}"))
+
+
+@cli.command()
+@click.option(
+    "--max-steps", default=5, show_default=True, help="Max agent reasoning steps."
+)
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Show tool calls: -v tool names, -vv also arguments and results.",
+)
+def chat(max_steps: int, verbose: int) -> None:
+    """Chat with the agent, with conversation memory. Ctrl+D to quit."""
+    agent = Agent(
+        LLMClient(),
+        tools=TOOLS,
+        max_steps=max_steps,
+        on_tool_run=lambda tool_run: _show_tool_run(tool_run, verbose),
+    )
+    messages: list[Message] = []
+
+    async def run_chat() -> None:
+        while True:
+            try:
+                query = console.input(f"{QUERY_PROMPT} ")
+            except EOFError, KeyboardInterrupt:
+                return
+            if not query.strip():
+                continue
+            try:
+                with err_console.status("Thinking…"):
+                    result = await agent.run(query, messages)
+            except LLMException as exc:
+                err_console.print(Text(f"Agent couldn't answer: {exc}", style="red"))
+                continue
+            console.print()
+            console.print(Markdown(f"**{ANSWER_LABEL}** {result.answer or ''}"))
+            console.print()
+
+    asyncio.run(run_chat())
 
 
 @cli.command()

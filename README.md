@@ -34,6 +34,7 @@ help_desk_agent ask "How much do I get back if I cancel CW-1002?"
 help_desk_agent ask "..." -v  # also show which tools ran
 help_desk_agent ask "..." -vv  # also show tool arguments and results
 help_desk_agent --log-level debug ask "..."  # full requests and response logs
+help_desk_agent chat  # chat with follow-up questions, Ctrl+D to quit
 ```
 
 ## Testing
@@ -57,7 +58,7 @@ I tried three providers:
 
 1. **Google Gemini, `gemini-3.8-flash`**. This was my first choice, as I knew its API was
    OpenAI-compatible, and that it had a free tier. I managed to get it working only once, on my
-   first try. Google's API started returning 503 afterwards, and after a few minutes I've manageged
+   first try. Google's API started returning 503 afterwards, and after a few minutes I managed
    to hit their rate limit.
 2. **AionLabs, `aion-2.0`**. To be honest, I've never heard of AionLabs prior to googling "free llm API".
    I did not stick to it for long, because of a 20k daily token limit, which I've hit in 3 minutes
@@ -81,6 +82,11 @@ The code lives in `src/help_desk_agent/`:
 
 ### Loop
 
+Agent can be prompted in two ways: using `ask`, or using `chat`.
+
+In `chat`, the CLI keeps one list of messages for the whole session and passes it to the agent in
+subsequent prompts.
+
 1. The agent sends the system prompt, user's question and the tool definitions to the model.
 2. If the reply contains tool calls, the agent runs each tool, adds each result to the conversation
    as a `tool` message linked to its call, and asks the model again.
@@ -92,13 +98,13 @@ back to the model as an error message, so it can correct itself.
 
 ### Tools
 
-- **`search_policies(query)`** splits each Markdown file in `data/policies/` into its header sections
+- **`search_policies(query)`** splits each Markdown file in `src/help_desk_agent/data/policies/` into its header sections
   and ranks them by the words they share with the query, ignoring certain common words. A match in
   a section heading counts double. Words match on their first 5 letters, so "cancel", "cancelled"
   and "cancellation" match each other. It then returns the 3 best sections with file and heading,
   or "No matching policy found."
-- **`get_booking(booking_id)`** returns the booking from `data/bookings.json`. If a booking does not
-  exist, it return an error.
+- **`get_booking(booking_id)`** returns the booking from `src/help_desk_agent/data/bookings.json`. If a
+  booking does not exist, it returns an error.
 - **`calculate_refund(booking_id)`** does all the money calculation in code, per rules from the task:
   - only confirmed bookings can be cancelled; others return `can_cancel: false` and 0;
   - 48 hours or more before the start: 100% of the rental; 24 to 48 hours: 50%; less than 24 hours: 0%;
@@ -122,7 +128,7 @@ The system prompt gives the model a role of a CityWheels help desk person and th
 
 - `tests/tools/`: unit tests for tools.
 - `tests/test_agent.py`: tests of the agent loop with a fake model that returns scripted replies,
-  covering tool calls, unknown tools, invalid arguments and the step limit.
+  covering tool calls, unknown tools, invalid arguments, the step limit and conversation memory.
 - `tests/test_evaluation.py`: tests of the evaluation checks.
 
 ## Evaluation results
@@ -162,14 +168,14 @@ implement certain details. A few examples of AI-generated code, which I had to f
 
 ## Limitations
 
-- **No conversation memory.** Every `ask` is a new conversation, so no follow-up questions.
+- **Simple conversation memory.** `chat` keeps the conversation only while it runs, and never
+  compacts it, so a long chat can outgrow the model's context window. `ask` has no memory.
 - **Simple search.** `search_policies` matches words, not meaning. It does not know synonyms. It
   works only for English.
 
 ## Further development
 
-- Add conversation memory.
-- Make code easily 
+- Save chat conversations, and compact long ones.
 - Evaluate different models multiple times.
 - Add a second evaluation using another model as a judge.
 - Write a better version of `search_policies`.
