@@ -1,0 +1,178 @@
+# Evaluation questions for the CityWheels help desk agent.
+#
+# Checks for one question, all optional:
+# - expected_tools: tools the agent must call, in any order
+# - forbidden_tools: tools the agent must not call
+# - numbers: numbers the answer must mention (90 matches "90", "90.00" and "90,00")
+# - forbidden_numbers: numbers the answer must not mention
+# - contains: phrases the answer must contain, ignoring case.
+#   Each inner list is one requirement, met when the answer contains
+#   at least one of its phrases: [["card"], ["voucher", "coupon"]]
+# - not_contains: phrases the answer must not contain, ignoring case
+#
+# Checks for every answer, done by the runner:
+# - every euro amount in the answer comes from a tool result
+# - every phone number and email address in the answer is the shop's real one
+
+
+[[question]]
+id = "opening hours"
+category = "policy"
+question = "What are your opening hours in June?"
+expected_tools = ["search_policies"]
+contains = [["08:00", "8:00", "8 am", "8am"], ["20:00", "8 pm", "8pm"]]
+
+[[question]]
+id = "e-bike day price"
+category = "policy"
+question = "How much does it cost to rent an electric bike for a whole day?"
+expected_tools = ["search_policies"]
+numbers = [40]
+
+[[question]]
+# E-bikes need riders of 16 or older, so a 14-year-old cannot rent one
+id = "e-bike age limit"
+category = "policy"
+question = "Can my 14-year-old son rent an e-bike?"
+expected_tools = ["search_policies"]
+numbers = [16]
+
+[[question]]
+# A question in Polish gets an answer in Polish
+id = "polish city bike hour price"
+category = "policy"
+question = "Ile kosztuje wypożyczenie roweru miejskiego na godzinę?"
+expected_tools = ["search_policies"]
+numbers = [4]
+contains = [["godzin"]]
+not_contains = ["per hour"]
+
+[[question]]
+# CW-1004 is a city bike with a child seat
+id = "booking details"
+category = "booking"
+question = "What bike and add-ons did I book in CW-1004?"
+expected_tools = ["get_booking"]
+contains = [["city"], ["child seat", "child_seat"]]
+
+[[question]]
+# CW-9999 does not exist
+id = "unknown booking"
+category = "booking"
+question = "What is the status of my booking CW-9999?"
+expected_tools = ["get_booking"]
+contains = [[
+    "not found",
+    "not be found",
+    "could not find",
+    "couldn't find",
+    "cannot find",
+    "can't find",
+    "no booking",
+    "does not exist",
+    "doesn't exist",
+]]
+
+[[question]]
+# 73h before start: 100% of 40 EUR rental + 50 EUR deposit = 90 EUR, to the card.
+# 92 would mean the booking fee was refunded too.
+# The agent cannot cancel bookings, so it must not offer to.
+id = "refund full"
+category = "refund"
+question = "I want to cancel booking CW-1001. How much money will I get back?"
+expected_tools = ["calculate_refund"]
+numbers = [90]
+forbidden_numbers = [92]
+contains = [["card"]]
+not_contains = [
+    "fully refundable",
+    "would you like me to cancel",
+    "want me to cancel",
+    "shall i cancel",
+    "should i cancel",
+    "proceed with the cancellation",
+]
+
+[[question]]
+# Exactly 48h before start still counts as 100%: 36 EUR rental + 150 EUR deposit = 186 EUR
+id = "refund exactly 48 hours"
+category = "refund"
+question = "If I cancel CW-1007 right now, what is my refund?"
+expected_tools = ["calculate_refund"]
+numbers = [186]
+
+[[question]]
+# 33h before start: 50% of 80 EUR rental + 300 EUR deposit = 340 EUR.
+# The booking fee is never refunded.
+id = "refund half"
+category = "refund"
+question = "How much do I get back if I cancel CW-1002 now?"
+expected_tools = ["calculate_refund"]
+numbers = [340]
+contains = [["50%", "50 %", "half"]]
+not_contains = ["fully refundable"]
+
+[[question]]
+# 6h before start: no rental refund, only the 50 EUR deposit.
+# 62 would be everything paid, including the rental and booking fee.
+id = "refund deposit only"
+category = "refund"
+question = "My ride CW-1003 starts this afternoon. What do I get back if I cancel?"
+expected_tools = ["calculate_refund"]
+numbers = [50]
+forbidden_numbers = [62]
+
+[[question]]
+# Paid with a voucher: 23 EUR rental + 50 EUR deposit = 73 EUR, as a new voucher
+id = "refund voucher"
+category = "refund"
+question = "I paid CW-1004 with a voucher. If I cancel now, how much do I get back and in what form?"
+expected_tools = ["calculate_refund"]
+numbers = [73]
+contains = [["voucher"]]
+
+[[question]]
+# CW-1008 is in progress, so it cannot be cancelled and nothing is refunded.
+# 66 would be the rental and deposit refunded anyway.
+id = "cannot cancel in progress"
+category = "refund"
+question = "Can I cancel CW-1008 and get a refund?"
+expected_tools = ["calculate_refund"]
+forbidden_numbers = [66]
+contains = [[
+    "in progress",
+    "in_progress",
+    "already started",
+    "cannot be cancel",
+    "can't be cancel",
+    "cannot cancel",
+    "can't cancel",
+]]
+
+[[question]]
+id = "refuse off topic"
+category = "refusal"
+question = "What is the capital of Australia?"
+forbidden_tools = ["get_booking", "calculate_refund"]
+contains = [["staff", "help@citywheels.example", "+48 000 000 000"]]
+not_contains = ["canberra"]
+
+[[question]]
+id = "refuse not in documents"
+category = "refusal"
+question = "Do you organise guided bike tours of the city?"
+forbidden_tools = ["get_booking", "calculate_refund"]
+contains = [["staff", "help@citywheels.example", "+48 000 000 000"]]
+
+[[question]]
+# Storm refunds are decided by the staff, so the agent must not promise one
+id = "refuse storm refund decision"
+category = "refusal"
+question = "There is a storm warning for the day of my rental. Will I get a full refund?"
+expected_tools = ["search_policies"]
+contains = [["staff"]]
+not_contains = [
+    "you will get a full refund",
+    "you'll get a full refund",
+    "you will receive a full refund",
+]

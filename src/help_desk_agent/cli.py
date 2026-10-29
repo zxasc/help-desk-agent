@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 import click
 import httpx2
@@ -12,6 +13,7 @@ from rich.text import Text
 
 from help_desk_agent.agent import Agent
 from help_desk_agent.core import ToolRun
+from help_desk_agent.evaluation import load_cases, render_results, run_case
 from help_desk_agent.exceptions import LLMException
 from help_desk_agent.llm_client import LLMClient
 from help_desk_agent.tools import TOOLS
@@ -133,6 +135,46 @@ def ask(query: str, max_steps: int, verbose: int) -> None:
         raise click.ClickException("The agent returned an empty answer.")
     console.print()
     console.print(Markdown(f"**{ANSWER_LABEL}** {result.answer}"))
+
+
+@cli.command()
+@click.option(
+    "--questions",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default="eval/questions.toml",
+    show_default=True,
+    help="TOML file with the evaluation questions.",
+)
+@click.option(
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="eval/results.md",
+    show_default=True,
+    help="Where to write the Markdown results.",
+)
+@click.option(
+    "--max-steps", default=5, show_default=True, help="Max agent reasoning steps."
+)
+def evaluate(questions: Path, output: Path, max_steps: int) -> None:
+    """Run the agent on every evaluation question and write the results."""
+    cases = load_cases(questions)
+    llm = LLMClient()
+    agent = Agent(llm, tools=TOOLS, max_steps=max_steps)
+
+    async def run_all():
+        outcomes = []
+        for number, case in enumerate(cases, start=1):
+            with err_console.status(f"[{number}/{len(cases)}] {case.id}"):
+                outcome = await run_case(agent, case)
+            mark = "✅" if outcome.passed else "❌"
+            err_console.print(Text(f"{mark} {case.id} {'; '.join(outcome.failures)}"))
+            outcomes.append(outcome)
+        return outcomes
+
+    outcomes = asyncio.run(run_all())
+    output.write_text(render_results(outcomes, model=llm.model))
+    passed = sum(outcome.passed for outcome in outcomes)
+    console.print(f"{passed}/{len(outcomes)} questions passed, results in {output}")
 
 
 if __name__ == "__main__":
