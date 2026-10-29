@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from help_desk_agent.agent import Agent
-from help_desk_agent.core import Message, Tool, ToolCall
+from help_desk_agent.agent import MAX_STEPS_REACHED, Agent
+from help_desk_agent.core import AgentResult, Message, Tool, ToolCall, ToolRun
 from help_desk_agent.exceptions import ToolException
 
 QUESTION = "Is booking CW-1001 confirmed?"
@@ -15,7 +15,6 @@ TOOL_CALL_ID = "call-1"
 BOOKING_ARGUMENTS = json.dumps({"booking_id": BOOKING_ID})
 FAILURE_REASON = "booking file is broken"
 MAX_STEPS = 3
-MAX_STEPS_REACHED = "Agent stopped: Reached maximum steps without a final answer."
 
 FIRST_CALL = 0
 LAST_CALL = -1
@@ -94,8 +93,9 @@ def tool_call_reply(name: str, arguments: str) -> Message:
 FINAL_REPLY = Message(role="assistant", content=FINAL_ANSWER)
 
 
-def run_agent(model: FakeChatModel) -> str | None:
-    return asyncio.run(Agent(model, TOOLS, max_steps=MAX_STEPS).run(QUESTION))
+def run_agent(model: FakeChatModel, on_tool_run=None) -> AgentResult:
+    agent = Agent(model, TOOLS, max_steps=MAX_STEPS, on_tool_run=on_tool_run)
+    return asyncio.run(agent.run(QUESTION))
 
 
 @pytest.mark.parametrize(
@@ -109,7 +109,7 @@ def run_agent(model: FakeChatModel) -> str | None:
     ],
 )
 def test_agent_returns_final_answer(replies):
-    assert run_agent(FakeChatModel(replies)) == FINAL_ANSWER
+    assert run_agent(FakeChatModel(replies)).answer == FINAL_ANSWER
 
 
 def test_agent_sends_system_prompt_question_and_tools_to_model():
@@ -203,4 +203,36 @@ def test_agent_stops_after_max_steps_without_final_answer():
     model = FakeChatModel([tool_call_reply("lookup", BOOKING_ARGUMENTS)] * MAX_STEPS)
     result = run_agent(model)
 
-    assert (result, len(model.calls)) == (MAX_STEPS_REACHED, MAX_STEPS)
+    assert (result.answer, len(model.calls)) == (MAX_STEPS_REACHED, MAX_STEPS)
+
+
+def test_agent_returns_every_tool_run_with_its_result():
+    lookup_call = tool_call_reply("lookup", BOOKING_ARGUMENTS)
+    text_call = tool_call_reply("text_lookup", BOOKING_ARGUMENTS)
+    model = FakeChatModel([lookup_call, text_call, FINAL_REPLY])
+    expected = (
+        ToolRun(
+            call=lookup_call.tool_calls[FIRST_CALL],
+            result=json.dumps(lookup(BOOKING_ID)),
+        ),
+        ToolRun(
+            call=text_call.tool_calls[FIRST_CALL],
+            result=text_lookup(BOOKING_ID),
+        ),
+    )
+
+    assert run_agent(model).tool_runs == expected
+
+
+def test_agent_reports_each_tool_run_while_running():
+    model = FakeChatModel(
+        [
+            tool_call_reply("lookup", BOOKING_ARGUMENTS),
+            tool_call_reply("text_lookup", BOOKING_ARGUMENTS),
+            FINAL_REPLY,
+        ]
+    )
+    reported: list[ToolRun] = []
+    result = run_agent(model, on_tool_run=reported.append)
+
+    assert tuple(reported) == result.tool_runs
