@@ -87,7 +87,7 @@ class FakeChatModel:
 def tool_call_reply(name: str, arguments: str) -> Message:
     return Message(
         role="assistant",
-        tool_calls=(ToolCall(id=TOOL_CALL_ID, name=name, arguments=arguments),),
+        tool_calls=[ToolCall(id=TOOL_CALL_ID, name=name, arguments=arguments)],
     )
 
 

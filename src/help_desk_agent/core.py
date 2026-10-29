@@ -22,7 +22,7 @@ class Message:
 
     role: str
     content: str | None = None
-    tool_calls: tuple[ToolCall, ...] = ()
+    tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None  # set on role="tool" messages
 
 

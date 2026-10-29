@@ -153,14 +153,14 @@ class LLMClient:
 
     @staticmethod
     def _parse_message(data: dict[str, Any]) -> Message:
-        tool_calls = tuple(
+        tool_calls = [
             ToolCall(
                 id=call["id"],
                 name=call["function"]["name"],
                 arguments=call["function"].get("arguments") or "{}",
             )
             for call in data.get("tool_calls") or []
-        )
+        ]
         return Message(
             role="assistant", content=data.get("content"), tool_calls=tool_calls
         )
