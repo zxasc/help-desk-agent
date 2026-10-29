@@ -60,7 +60,7 @@ class AgentResult:
     """The agent's answer and every tool it ran to get there."""
 
     answer: str | None
-    tool_runs: tuple[ToolRun, ...] = ()
+    tool_runs: list[ToolRun] = field(default_factory=list)
 
 
 class ChatModel(Protocol):

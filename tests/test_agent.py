@@ -210,7 +210,7 @@ def test_agent_returns_every_tool_run_with_its_result():
     lookup_call = tool_call_reply("lookup", BOOKING_ARGUMENTS)
     text_call = tool_call_reply("text_lookup", BOOKING_ARGUMENTS)
     model = FakeChatModel([lookup_call, text_call, FINAL_REPLY])
-    expected = (
+    expected = [
         ToolRun(
             call=lookup_call.tool_calls[FIRST_CALL],
             result=json.dumps(lookup(BOOKING_ID)),
@@ -219,7 +219,7 @@ def test_agent_returns_every_tool_run_with_its_result():
             call=text_call.tool_calls[FIRST_CALL],
             result=text_lookup(BOOKING_ID),
         ),
-    )
+    ]
 
     assert run_agent(model).tool_runs == expected
 
@@ -235,4 +235,4 @@ def test_agent_reports_each_tool_run_while_running():
     reported: list[ToolRun] = []
     result = run_agent(model, on_tool_run=reported.append)
 
-    assert tuple(reported) == result.tool_runs
+    assert reported == result.tool_runs

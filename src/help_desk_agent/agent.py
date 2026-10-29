@@ -101,9 +101,7 @@ RULES:
                         "Step %d: LLM reply has neither text nor tool calls",
                         state.step_count,
                     )
-                return AgentResult(
-                    answer=reply.content, tool_runs=tuple(state.tool_runs)
-                )
+                return AgentResult(answer=reply.content, tool_runs=state.tool_runs)
 
             for call in reply.tool_calls:
                 tool_run = ToolRun(call=call, result=await self._run_tool_call(call))
@@ -115,4 +113,4 @@ RULES:
                     Message(role="tool", content=tool_run.result, tool_call_id=call.id)
                 )
 
-        return AgentResult(answer=MAX_STEPS_REACHED, tool_runs=tuple(state.tool_runs))
+        return AgentResult(answer=MAX_STEPS_REACHED, tool_runs=state.tool_runs)
