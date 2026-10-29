@@ -80,12 +80,14 @@ RULES:
             # Wrong or missing argument names from the model
             return f"Error: Invalid arguments for '{call.name}': {e}"
 
-    async def run(self, query: str) -> AgentResult:
-        state = AgentState()
-        # Initialize context with System Prompt and User Query
-        state.messages.append(
-            Message(role="system", content=self._build_system_prompt())
-        )
+    async def run(
+        self, query: str, messages: list[Message] | None = None
+    ) -> AgentResult:
+        state = AgentState(messages=messages if messages is not None else [])
+        if not state.messages:
+            state.messages.append(
+                Message(role="system", content=self._build_system_prompt())
+            )
         state.messages.append(Message(role="user", content=query))
 
         for _ in range(self.max_steps):
