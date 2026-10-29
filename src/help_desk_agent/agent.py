@@ -2,19 +2,24 @@ import asyncio
 import inspect
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
 
 from help_desk_agent.core import (
     CURRENT_TIME,
+    AgentResult,
     AgentState,
     ChatModel,
     Message,
     Tool,
     ToolCall,
+    ToolRun,
 )
 from help_desk_agent.exceptions import ToolException
 
 logger = logging.getLogger(__name__)
+
+MAX_STEPS_REACHED = "Agent stopped: Reached maximum steps without a final answer."
 
 
 class Agent:
@@ -24,11 +29,13 @@ class Agent:
         tools: dict[str, Tool],
         max_steps: int = 5,
         now: datetime = CURRENT_TIME,
+        on_tool_run: Callable[[ToolRun], None] | None = None,
     ):
         self.llm = llm_client
         self.tools = tools
         self.max_steps = max_steps
         self.now = now
+        self.on_tool_run = on_tool_run
 
     def _build_system_prompt(self) -> str:
         return f"""You are the help desk assistant of CityWheels, a small bike rental shop.
@@ -73,15 +80,13 @@ RULES:
             # Wrong or missing argument names from the model
             return f"Error: Invalid arguments for '{call.name}': {e}"
 
-    async def run(self, query: str) -> str | None:
+    async def run(self, query: str) -> AgentResult:
         state = AgentState()
         # Initialize context with System Prompt and User Query
         state.messages.append(
             Message(role="system", content=self._build_system_prompt())
         )
         state.messages.append(Message(role="user", content=query))
-
-        print(f"USER: {query}\n" + "-" * 40)
 
         for _ in range(self.max_steps):
             state.step_count += 1
@@ -96,18 +101,18 @@ RULES:
                         "Step %d: LLM reply has neither text nor tool calls",
                         state.step_count,
                     )
-                print(f"✅ FINAL ANSWER: {reply.content}")
-                return reply.content
-
-            if reply.content:
-                print(f"🤔 THOUGHT: {reply.content}")
-
-            for call in reply.tool_calls:
-                print(f"🛠️ ACTION: {call.name} | INPUT: {call.arguments}")
-                observation = await self._run_tool_call(call)
-                print(f"👀 OBSERVATION: {observation}\n" + "-" * 40)
-                state.messages.append(
-                    Message(role="tool", content=observation, tool_call_id=call.id)
+                return AgentResult(
+                    answer=reply.content, tool_runs=tuple(state.tool_runs)
                 )
 
-        return "Agent stopped: Reached maximum steps without a final answer."
+            for call in reply.tool_calls:
+                tool_run = ToolRun(call=call, result=await self._run_tool_call(call))
+                logger.info("Step %d: ran tool %s", state.step_count, call.name)
+                state.tool_runs.append(tool_run)
+                if self.on_tool_run:
+                    self.on_tool_run(tool_run)
+                state.messages.append(
+                    Message(role="tool", content=tool_run.result, tool_call_id=call.id)
+                )
+
+        return AgentResult(answer=MAX_STEPS_REACHED, tool_runs=tuple(state.tool_runs))
