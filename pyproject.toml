@@ -40,7 +40,6 @@ requires = ["tox>=4.22", "tox-uv>=1.11"]
 env_list = ["lint", "type", "test"]
 
 [tool.tox.env_run_base]
-package = "editable"
 dependency_groups = ["dev"]
 
 [tool.tox.env.test]
