@@ -47,6 +47,22 @@ class Tool:
         }
 
 
+@dataclass(frozen=True, kw_only=True)
+class ToolRun:
+    """One tool call the agent made, and the result it sent back to the model."""
+
+    call: ToolCall
+    result: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentResult:
+    """The agent's answer and every tool it ran to get there."""
+
+    answer: str | None
+    tool_runs: tuple[ToolRun, ...] = ()
+
+
 class ChatModel(Protocol):
     """Anything that returns the model's next message, e.g. LLMClient or a test fake."""
 
@@ -60,4 +76,5 @@ class AgentState:
     """Holds the current state and memory of the agent."""
 
     messages: list[Message] = field(default_factory=list)
+    tool_runs: list[ToolRun] = field(default_factory=list)
     step_count: int = 0
