@@ -8,7 +8,7 @@ from typing import Any
 
 from help_desk_agent.core import CURRENT_TIME, Tool
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+DATA_DIR = Path(__file__).parent / "data"
 POLICIES_DIR = DATA_DIR / "policies"
 BOOKINGS_PATH = DATA_DIR / "bookings.json"
 
